@@ -9,7 +9,7 @@
     targetProcess := ""
     measuringFrametime := false
     frametimes := []
-    averagingInterval := 500
+    averagingInterval := 1000
     averageFrametime := 0
     originTime := 0
     timeFrequency := 0
@@ -23,14 +23,12 @@
         fileMapRead := 0x0004 ; i dont fucking know man
 
         this.hMapFile := DllCall("OpenFileMapping", "UInt", fileMapRead, "Int", 0, "Str", "RTSSSharedMemoryV2")
-        if !this.hMapFile
-        {
+        if (!this.hMapFile) {
             throw Exception("Could not open RTSS Shared Memory. Is RivaTuner Statistics Server running?", -1)
         }
 
         this.pMapAddr := DllCall("MapViewOfFile", "Ptr", this.hMapFile, "UInt", fileMapRead, "UInt", 0, "UInt", 0, "Ptr", 0)
-        if !this.pMapAddr
-        {
+        if (!this.pMapAddr) {
             DllCall("CloseHandle", "Ptr", this.hMapFile)
             throw Exception("Failed to map view of shared memory. Why the fuck?", -2)
         }
@@ -40,11 +38,13 @@
     }
 
     __Delete() {
-        if (this.pMapAddr)
+        if (this.pMapAddr) {
             DllCall("UnmapViewOfFile", "Ptr", this.pMapAddr)
+        }
 
-        if (this.hMapFile)
+        if (this.hMapFile) {
             DllCall("CloseHandle", "Ptr", this.hMapFile)
+        }
     }
 
     ; retrieve fps

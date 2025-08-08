@@ -24,7 +24,7 @@ global runningGTA := processExist("GTA5_Enhanced.exe") ? "GTA5_Enhanced.exe" : "
         ExitApp
     }
 
-    global inputHandler = new InputManager(1, 1, 10) ; Configure extra delay on top of framerate-based delay, and minimum delay allowed (it'll default to this delay if your frametimes are lower than this value)
+    global inputHandler = new InputManager(1, 1, 11) ; Configure extra delay on top of framerate-based delay, and minimum delay allowed (it'll default to this delay if your frametimes are lower than this value)
 
     Hotkey, *§, BST
     Hotkey, *F2, Ammo
