@@ -1,6 +1,10 @@
 ﻿#NoEnv
 #SingleInstance Force
 #Persistent
+#MaxHotkeysPerInterval 99000000
+#HotkeyInterval 99000000
+#MaxThreadsBuffer On
+#KeyHistory 0
 #Include RTSSReader.ahk
 global runningGTA := processExist("GTA5_Enhanced.exe") ? "GTA5_Enhanced.exe" : "GTA5.exe"
 #If WinActive("ahk_exe " runningGTA)
@@ -10,6 +14,7 @@ global runningGTA := processExist("GTA5_Enhanced.exe") ? "GTA5_Enhanced.exe" : "
     SetMouseDelay, -1
     SetWinDelay, -1
     SetControlDelay, -1
+    SetDefaultMouseSpeed, 0
     ListLines Off
     SendMode Input
 
@@ -23,40 +28,24 @@ global runningGTA := processExist("GTA5_Enhanced.exe") ? "GTA5_Enhanced.exe" : "
         MsgBox, 16, Error, % "Failed to initialize RTSS reader.`n`n" e.Message
         ExitApp
     }
-
-    global inputHandler = new InputManager(1, 1, 11) ; Configure extra delay on top of framerate-based delay, and minimum delay allowed (it'll default to this delay if your frametimes are lower than this value)
+    global stdout := FileOpen("log.txt","w")
 
     Hotkey, *§, BST
     Hotkey, *F2, Ammo
-
-    ; SetTimer, thing, 100
     return
 
-    thing:
-        Tooltip, % RTSSListener.getFrameTime() " size " RTSSListener.frametimes.Length(), -1000, -1000
-    Return
-
-    BST: ; Example macros that I made for testing this shit
+    BST:
+        ; InputManager.sendInputs(["enter downR","m","enter up","down","enter downR","down 3","enter up","down down","enter downR","down up","enter up"])
         InputManager.sendInputs(["m","enter","down 4","enter","down","enter"])
     Return
 
     Ammo:
-        InputManager.sendInputs(["m","down 4","enter 2","sleep 4","right","up","enter","m"])
+        InputManager.sendInputs(["enter downR","m","down 4","enter up","enter","sleep","enter","enter downR","down","enter up","m"])
     Return
 
     class InputManager {
-        static inputSanitizerPattern := "O)(\w+)\s?(down|up|\d+)?"
+        static inputSanitizerPattern := "O)(\w+)\s?(down|up|\d+)?(R)?"
         static numberCheckPattern = "^\d+$"
-
-        delay := 0
-        pressDuration := 0
-        minimumDelay := 0
-
-        __New(delay, pressDuration, minimumDelay) {
-            this.delay := delay
-            this.pressDuration := pressDuration
-            this.minimumDelay := minimumDelay
-        }
 
         ; The Parameter is an array of keys; doesn't support raw strings cause I was lazy and that is a lot of effort for no gain. You can also type in "sleep" to wait for appromximately 1 frame, or sleep multiple times.
         sendInputs(inputs) {
@@ -65,21 +54,26 @@ global runningGTA := processExist("GTA5_Enhanced.exe") ? "GTA5_Enhanced.exe" : "
                 sentStr := []
                 for index, input in sanitizedInputs {
                     if (input.sleep) {
-                        sentStr.Push("sleep")
-                        Sleep(Max(RTSSListener.getFrameTime() + inputHandler.delay, 1000 / (RTSSListener.getFPS() * 0.8), inputHandler.minimumDelay)) ; Why the fuck are this variables undefined and I have to reference inputHandler?
+                        this._queueInput("{Blind}{f24 up}", true)
                     } else if (input.single) {
-                        Send % "{Blind}" . input.rawInput
-                        sentStr.Push("{Blind}" . input.rawInput)
+                        this._queueInput("{Blind}" . input.rawInput, input.recursive)
                     } else {
-                        Send % "{Blind}" input.rawInput . " down}"
-                        sentStr.Push("{Blind}" input.rawInput . " down}")
-                        Sleep(Max(RTSSListener.getFrameTime() + inputHandler.pressDuration, 1000 / (RTSSListener.getFPS() * 0.8), inputHandler.minimumDelay))
-                        Send % "{Blind}" input.rawInput . " up}"
-                        sentStr.Push("{Blind}" input.rawInput . " up}")
-                        Sleep(Max(RTSSListener.getFrameTime() + inputHandler.delay, 1000 / (RTSSListener.getFPS() * 0.8), inputHandler.minimumDelay))
+                        this._queueInput("{Blind}" input.rawInput . " down}", input.recursive)
+                        this._queueInput("{Blind}" input.rawInput . " up}", input.recursive)
                     }
                 }
+
             }
+        }
+
+        _queueInput(input, recursive) {
+            funcObj := ObjBindMethod(this, "_sendInput", input)
+            RTSSListener.queueTask(0, funcObj, recursive)
+        }
+
+        _sendInput(input) {
+            Send %input%
+            ; stdout.WriteLine(RTSSListener._getTimeSinceStart() " " input)
         }
 
         _sanitizeInputs(inputs) {
@@ -88,6 +82,7 @@ global runningGTA := processExist("GTA5_Enhanced.exe") ? "GTA5_Enhanced.exe" : "
                 if (RegExMatch(input, this.inputSanitizerPattern, inputMatch)) {
                     inputName := inputMatch[1]
                     secondArgMatch := inputMatch[2]
+                    isRecursive := inputMatch[3] != ""
 
                     sanitizedInput := {}
                     if (inputName = "sleep") {
@@ -97,10 +92,11 @@ global runningGTA := processExist("GTA5_Enhanced.exe") ? "GTA5_Enhanced.exe" : "
                         sanitizedInput.single := false
                         sanitizedInput.sleep := false
                     } else {
-                        sanitizedInput.rawInput := "{" inputMatch[0] "}"
+                        sanitizedInput.rawInput := "{" inputName " " secondArgMatch "}"
                         sanitizedInput.single := true
                         sanitizedInput.sleep := false
                     }
+                    sanitizedInput.recursive := isRecursive
                     amount := this._isNumber(secondArgMatch) ? secondArgMatch : 1
                     Loop %amount% {
                         sanitizedData.Push(sanitizedInput)

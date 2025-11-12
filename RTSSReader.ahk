@@ -8,11 +8,10 @@
     processEntryAddress := 0
     targetProcess := ""
     measuringFrametime := false
-    frametimes := []
-    averagingInterval := 1000
-    averageFrametime := 0
     originTime := 0
     timeFrequency := 0
+    queuedTasks := []
+    lastFrametime := 0
 
     __New(targetProcess) {
         this.targetProcess := targetProcess
@@ -81,6 +80,10 @@
         return this.averageFrametime
     }
 
+    queueTask(delay, func, recursive) {
+        this.queuedTasks.Push({delay: delay, func: func, recursive: recursive})
+    }
+
     ; retrieve frametime in ms
     _getRawFrametime() {
         if (this.processEntryAddress != 0) {
@@ -121,24 +124,30 @@
     }
 
     _updateFrameTimes() {
-        DllCall("QueryPerformanceCounter", "Int64*", currentTime)
-        now := (currentTime - this.originTime) * 1000 / this.timeFrequency
         currentFrametime := this._getRawFrametime() ; frametime in ms
 
-        ; Add new entry
-        this.frametimes.Push({time: now, frametime: currentFrametime})
+        if (this.queuedTasks.Length() && this.lastFrametime != currentFrametime) {
 
-        while (this.frametimes.Length() && (now - this.frametimes[1].time > this.averagingInterval)) {
-            this.frametimes.RemoveAt(0)
+            task := this.queuedTasks[1]
+            task.delay--
+            if (task.delay < 0) {
+                this.queuedTasks.RemoveAt(1)
+                task.func.Call()
+                if (task.recursive) {
+                    this._updateFrameTimes()
+                }
+            }
         }
 
-        ; Calculate average frametime
-        total := 0
-        for each, entry in this.frametimes {
-            total += entry.frametime
-        }
+        this.lastFrametime := currentFrametime
+    }
 
-        count := this.frametimes.Length()
-        this.averageFrametime := (count > 0) ? total / count : 0
+    _getTimeSinceStart() {
+        DllCall("QueryPerformanceCounter", "Int64*", currentTime)
+        return (currentTime - this.originTime) * 1000 / this.timeFrequency
+    }
+
+    _isWithinTolerance(n1, n2) {
+        return Abs(n1 - n2) < 0.1
     }
 }
